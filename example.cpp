@@ -1,4 +1,4 @@
-#include "AMT102VEncoder.hpp"
+#include "3PEncoder.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>

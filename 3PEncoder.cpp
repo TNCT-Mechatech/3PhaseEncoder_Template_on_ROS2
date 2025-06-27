@@ -8,7 +8,8 @@ std::atomic<int> AMT102VEncoder::pigpioInitCount(0);
 AMT102VEncoder::AMT102VEncoder(int gpioA, int gpioB, int gpioC)
     : pinA(gpioA), pinB(gpioB), pinC(gpioC),
       position(0), lastDirection(0), revolutionFlag(false),
-      cbIdA(-1), cbIdB(-1), cbIdC(-1)
+      cbIdA(-1), cbIdB(-1), cbIdC(-1),
+      last_position(0), speed_rps(0.0)
 {
     if (pigpioInitCount.fetch_add(1) == 0) {
         if (gpioInitialise() < 0) {
@@ -26,6 +27,8 @@ AMT102VEncoder::AMT102VEncoder(int gpioA, int gpioB, int gpioC)
     cbIdA = gpioSetAlertFuncEx(pinA, encoderISR, this);
     cbIdB = gpioSetAlertFuncEx(pinB, encoderISR, this);
     cbIdC = gpioSetAlertFuncEx(pinC, cPhaseISR, this);
+
+    last_time = std::chrono::steady_clock::now();
 }
 
 AMT102VEncoder::~AMT102VEncoder()
@@ -55,6 +58,7 @@ int AMT102VEncoder::getDirection() const
 {
     return lastDirection.load();
 }
+
 
 void AMT102VEncoder::encoderISR(int gpio, int level, uint32_t tick, void* userdata)
 {
@@ -127,4 +131,32 @@ int AMT102VEncoder::measurePPR()
     std::cout << "DIPスイッチ設定と一致するかご確認ください。" << std::endl;
 
     return ppr;
+}
+
+// --- 速度測定 ---
+
+void AMT102VEncoder::updateSpeed()
+{
+    // 100msなど任意周期で呼び出してください
+    auto now = std::chrono::steady_clock::now();
+    int pos = getPosition();
+    auto dt = std::chrono::duration<double>(now - last_time).count(); // 秒
+
+    if (dt > 0.0) {
+        int dp = pos - last_position;
+        speed_rps = dp / dt / static_cast<double>(measurePPR()); // 回転数[回/s]（PPR分で割る）
+    }
+
+    last_position = pos;
+    last_time = now;
+}
+
+double AMT102VEncoder::getSpeedRPS() const
+{
+    return speed_rps;
+}
+
+double AMT102VEncoder::getSpeedRPM() const
+{
+    return speed_rps * 60.0;
 }

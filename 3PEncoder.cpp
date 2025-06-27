@@ -5,8 +5,9 @@
 
 std::atomic<int> AMT102VEncoder::pigpioInitCount(0);
 
-AMT102VEncoder::AMT102VEncoder(int gpioA, int gpioB, int gpioC)
+AMT102VEncoder::AMT102VEncoder(int gpioA, int gpioB, int gpioC, int ppr, double gear_ratio)
     : pinA(gpioA), pinB(gpioB), pinC(gpioC),
+      ppr_(ppr), gear_ratio_(gear_ratio),
       position(0), lastDirection(0), revolutionFlag(false),
       cbIdA(-1), cbIdB(-1), cbIdC(-1),
       last_position(0), speed_rps(0.0)
@@ -54,11 +55,54 @@ int AMT102VEncoder::getPosition() const
     return position.load();
 }
 
+double AMT102VEncoder::getPositionOutput() const
+{
+    // モーター軸のカウントから出力軸の回転数
+    return (static_cast<double>(position.load()) / ppr_) / gear_ratio_;
+}
+
 int AMT102VEncoder::getDirection() const
 {
     return lastDirection.load();
 }
 
+// --- 速度測定 ---
+
+void AMT102VEncoder::updateSpeed()
+{
+    // 100msなど任意周期で呼び出してください
+    auto now = std::chrono::steady_clock::now();
+    int pos = getPosition();
+    auto dt = std::chrono::duration<double>(now - last_time).count(); // 秒
+
+    if (dt > 0.0) {
+        int dp = pos - last_position;
+        speed_rps = dp / dt / static_cast<double>(ppr_);
+    }
+
+    last_position = pos;
+    last_time = now;
+}
+
+double AMT102VEncoder::getSpeedRPS() const
+{
+    return speed_rps;
+}
+
+double AMT102VEncoder::getSpeedRPM() const
+{
+    return speed_rps * 60.0;
+}
+
+double AMT102VEncoder::getOutputSpeedRPS() const
+{
+    return speed_rps / gear_ratio_;
+}
+
+double AMT102VEncoder::getOutputSpeedRPM() const
+{
+    return getOutputSpeedRPS() * 60.0;
+}
 
 void AMT102VEncoder::encoderISR(int gpio, int level, uint32_t tick, void* userdata)
 {
@@ -133,30 +177,3 @@ int AMT102VEncoder::measurePPR()
     return ppr;
 }
 
-// --- 速度測定 ---
-
-void AMT102VEncoder::updateSpeed()
-{
-    // 100msなど任意周期で呼び出してください
-    auto now = std::chrono::steady_clock::now();
-    int pos = getPosition();
-    auto dt = std::chrono::duration<double>(now - last_time).count(); // 秒
-
-    if (dt > 0.0) {
-        int dp = pos - last_position;
-        speed_rps = dp / dt / static_cast<double>(measurePPR()); // 回転数[回/s]（PPR分で割る）
-    }
-
-    last_position = pos;
-    last_time = now;
-}
-
-double AMT102VEncoder::getSpeedRPS() const
-{
-    return speed_rps;
-}
-
-double AMT102VEncoder::getSpeedRPM() const
-{
-    return speed_rps * 60.0;
-}

@@ -3,29 +3,24 @@
 #include <thread>
 #include <chrono>
 
-AMT102VEncoder encoder(17, 27, 22);
+// 例: DIPスイッチでPPR=2048, ギア比=30:1
+AMT102VEncoder encoder(17, 27, 22, 2048, 30.0);
 
 int main()
 {
 
-    int ppr = encoder.measurePPR();
+    encoder.measurePPR();
 
     while (true)
     {
-        encoder.updateSpeed(); // 100msごとなどで呼び出す
-        std::string dir;
-        int d = encoder.getDirection();
-        if (d > 0)
-            dir = "正転";
-        else if (d < 0)
-            dir = "逆転";
-        else
-            dir = "停止";
+        encoder.updateSpeed();
+        std::cout << "モーター軸: "
+                  << encoder.getPosition() << " count, "
+                  << encoder.getSpeedRPM() << " rpm | ";
 
-        std::cout << "カウント値: " << encoder.getPosition()
-                  << " | 方向: " << dir
-                  << " | 速度: " << encoder.getSpeedRPS() << " [rps]"
-                  << " | " << encoder.getSpeedRPM() << " [rpm]        "
+        std::cout << "出力軸: "
+                  << encoder.getPositionOutput() << " 回転, "
+                  << encoder.getOutputSpeedRPM() << " rpm"
                   << "\r" << std::flush;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
